@@ -37,14 +37,18 @@ class GmailWizard
             ],
             [
                 'id' => 'configure_oauth_consent',
-                'title' => 'Configure the OAuth consent / audience',
-                'instructions' => 'Open the Google Auth Platform "Audience" page. '
-                    .'IMPORTANT: if all the accounts you will add belong to ONE Google Workspace organization, '
-                    .'choose User type "Internal". Otherwise choose "External" and then set the publishing status '
-                    .'to "In production" (you can ignore the "unverified app" warning for your own use). '
+                'title' => 'Configure the Google Auth Platform (consent / audience)',
+                'instructions' => 'Open the Google Auth Platform "Get started" page. On a new project you must '
+                    .'complete this once before you can create an OAuth client: fill in an App name, a User '
+                    .'support email, and a Developer contact email. For "Audience", if all the accounts you will '
+                    .'add belong to ONE Google Workspace organization, choose "Internal"; otherwise choose '
+                    .'"External". '
+                    .'IMPORTANT for External apps: afterwards open the "Audience" page and set the publishing '
+                    .'status to "In production" (you can ignore the "unverified app" warning for your own use). '
                     .'Do NOT leave an External app in "Testing" — Google expires its refresh tokens after 7 days, '
-                    .'which would force you to re-authorize every account weekly.',
-                'url' => 'https://console.cloud.google.com/auth/audience',
+                    .'which would force you to re-authorize every account weekly. '
+                    .'(Audience page: https://console.cloud.google.com/auth/audience)',
+                'url' => 'https://console.cloud.google.com/auth/overview',
             ],
             [
                 'id' => 'create_oauth_client',

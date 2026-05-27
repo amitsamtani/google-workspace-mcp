@@ -11,6 +11,7 @@ use Google\Service\Gmail\Draft;
 use Google\Service\Gmail\Label;
 use Google\Service\Gmail\LabelColor;
 use Google\Service\Gmail\Message;
+use Google\Service\Gmail\MessagePart;
 use Google\Service\Gmail\MessagePartHeader;
 use Google\Service\Gmail\ModifyThreadRequest;
 use Throwable;
@@ -222,7 +223,7 @@ class GmailClient
         $threadId = null;
         $headers = [
             'To' => implode(', ', $to),
-            'Subject' => $subject,
+            'Subject' => $this->encodeHeader($subject),
         ];
 
         if ($replyToMessageId !== null && $replyToMessageId !== '') {
@@ -402,17 +403,57 @@ class GmailClient
             return '';
         }
 
-        // Walk parts looking for text/plain; fall back to the top-level body.
-        $parts = $payload->getParts() ?: [$payload];
-        foreach ($parts as $part) {
-            if ($part->getMimeType() === 'text/plain' && $part->getBody()?->getData()) {
-                return $this->base64UrlDecode($part->getBody()->getData());
+        // Recurse through the MIME tree: text/plain can be nested several
+        // levels deep (e.g. multipart/mixed > multipart/alternative > text/plain
+        // when there are attachments). Fall back to a stripped text/html part.
+        $plain = $this->findPartData($payload, 'text/plain');
+        if ($plain !== null) {
+            return $plain;
+        }
+
+        $html = $this->findPartData($payload, 'text/html');
+
+        return $html !== null ? trim(html_entity_decode(strip_tags($html))) : '';
+    }
+
+    /**
+     * Depth-first search of the MIME tree for the decoded body of the first
+     * part matching $mimeType.
+     */
+    private function findPartData(MessagePart $part, string $mimeType): ?string
+    {
+        if ($part->getMimeType() === $mimeType && $part->getBody()?->getData()) {
+            return $this->base64UrlDecode($part->getBody()->getData());
+        }
+
+        foreach ($part->getParts() ?? [] as $child) {
+            $found = $this->findPartData($child, $mimeType);
+            if ($found !== null) {
+                return $found;
             }
         }
 
-        $data = $payload->getBody()?->getData();
+        return null;
+    }
 
-        return $data ? $this->base64UrlDecode($data) : '';
+    /**
+     * RFC 2047-encode a header value if it contains non-ASCII characters, so
+     * subjects like "Re: Façade quote" survive transport. Pure-ASCII values are
+     * returned unchanged. Encoded words are kept short and folded to stay under
+     * the 75-char limit without splitting multibyte characters.
+     */
+    private function encodeHeader(string $value): string
+    {
+        if (preg_match('/[^\x00-\x7F]/', $value) !== 1) {
+            return $value;
+        }
+
+        $words = array_map(
+            static fn (string $chunk): string => '=?UTF-8?B?'.base64_encode($chunk).'?=',
+            mb_str_split($value, 10, 'UTF-8'),
+        );
+
+        return implode("\r\n ", $words);
     }
 
     private function base64Url(string $value): string
@@ -427,6 +468,6 @@ class GmailClient
 
     private function messageFor(Throwable $e): string
     {
-        return $e instanceof GoogleServiceException ? $e->getMessage() : $e->getMessage();
+        return $e->getMessage();
     }
 }
