@@ -1,0 +1,33 @@
+*.log
+.DS_Store
+.env
+# The user's database holds encrypted OAuth credentials, refresh tokens, and
+# the audit log. Never commit it. WAL/SHM sidecar files included.
+/data.sqlite
+/data.sqlite-shm
+/data.sqlite-wal
+/database/*.sqlite
+.env.backup
+.env.production
+.phpactor.json
+.phpunit.result.cache
+/.codex
+/.cursor/
+/.idea
+/.nova
+/.phpunit.cache
+/.vscode
+/.zed
+/auth.json
+/node_modules
+/public/build
+/public/fonts-manifest.dev.json
+/public/hot
+/public/storage
+/storage/*.key
+/storage/pail
+/vendor
+_ide_helper.php
+Homestead.json
+Homestead.yaml
+Thumbs.db
