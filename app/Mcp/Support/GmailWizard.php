@@ -69,9 +69,12 @@ class GmailWizard
             [
                 'id' => 'add_account',
                 'title' => 'Connect a Google account',
-                'instructions' => 'I will call gmail_start_oauth_flow to open a browser consent URL. Authorize the '
-                    .'account you want to manage, then I will confirm it was added with gmail_complete_oauth_flow. '
-                    .'Repeat for each additional account.',
+                'instructions' => 'I will call gmail_start_oauth_flow to open a browser consent URL. The consent '
+                    .'screen will request Gmail (read/label/archive/draft) AND Calendar (events, free/busy, '
+                    .'calendar list) access in one step — approve them together. Authorize the account you want to '
+                    .'manage, then I will confirm it was added with gmail_complete_oauth_flow. Repeat for each '
+                    .'additional account. (Accounts connected before Calendar shipped can be re-authorized via the '
+                    .'same flow with email_hint=<their-email> to gain the Calendar scopes.)',
             ],
         ];
     }

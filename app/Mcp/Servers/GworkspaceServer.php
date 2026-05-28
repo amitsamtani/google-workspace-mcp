@@ -2,6 +2,15 @@
 
 namespace App\Mcp\Servers;
 
+use App\Mcp\Tools\Calendar\AddAttendeesTool;
+use App\Mcp\Tools\Calendar\CancelEventTool;
+use App\Mcp\Tools\Calendar\CreateEventTool;
+use App\Mcp\Tools\Calendar\FindFreeTimeTool;
+use App\Mcp\Tools\Calendar\GetEventTool;
+use App\Mcp\Tools\Calendar\ListCalendarsTool;
+use App\Mcp\Tools\Calendar\ListEventsTool;
+use App\Mcp\Tools\Calendar\RescheduleEventTool;
+use App\Mcp\Tools\Calendar\RespondToEventTool;
 use App\Mcp\Tools\Gmail\ArchiveThreadTool;
 use App\Mcp\Tools\Gmail\BulkArchiveThreadsTool;
 use App\Mcp\Tools\Gmail\BulkLabelThreadsTool;
@@ -26,15 +35,17 @@ use Laravel\Mcp\Server\Attributes\Name;
 use Laravel\Mcp\Server\Attributes\Version;
 
 #[Name('google-workspace-mcp')]
-#[Version('0.1.0')]
+#[Version('0.2.0')]
 #[Instructions(<<<'TXT'
-This server exposes Google Workspace (Gmail in v1) over MCP, managing multiple
-accounts at once. Tools are namespaced gmail_* (calendar_* and drive_* arrive
-later on this same server).
+This server exposes Google Workspace over MCP, managing multiple accounts at
+once. Tools are namespaced gmail_* (mail) and calendar_* (scheduling); drive_*
+will arrive later on this same server.
 
-MULTI-ACCOUNT: there is no "active account". Every mail tool requires an
-explicit `account` (the email address). Call gmail_list_accounts at the start
-of cross-account work to learn the canonical set; never assume account values.
+MULTI-ACCOUNT: there is no "active account". Every mail or calendar tool
+requires an explicit `account` (the email address). Call gmail_list_accounts
+at the start of cross-account work to learn the canonical set; never assume
+account values. There are no fan-out tools — cross-account work is N explicit
+calls so every action is individually auditable.
 
 ONBOARDING & ERROR-AS-SUGGESTION: tools return structured JSON. When the user
 is not set up, you get a recoverable payload with an `error` code and a
@@ -43,13 +54,28 @@ is not set up, you get a recoverable payload with an `error` code and a
   - no_accounts          -> call gmail_setup_status
   - reauth_needed        -> call gmail_start_oauth_flow with the given email_hint
   - unknown_account      -> use one of the listed valid_accounts
+  - scope_not_granted    -> the account has not yet authorized this capability.
+                            Call gmail_start_oauth_flow with email_hint=<account>
+                            to re-authorize and grant the missing scope.
 Follow the suggestion. A brand-new user with nothing configured should be
 onboarded entirely through these tools (gmail_setup_wizard walks them through
 creating their own Google Cloud project) — they should not need to read docs.
 
-SAFETY: this server has gmail.modify scope only. It can read, label, and
-archive mail and create drafts, but it CANNOT send mail or permanently
-delete/trash anything. Archiving only removes the INBOX label.
+SCOPES & RE-CONSENT: one consent grants Gmail + Calendar (+ Drive later).
+gmail_start_oauth_flow requests the full bundle. Accounts connected before
+Calendar shipped will not yet have Calendar scopes and must be re-authorized
+once; the scope_not_granted payload guides this. Each account's actually-
+granted scopes are visible via gmail_list_accounts / gmail_setup_status.
+
+SAFETY: Gmail stays archive-only and no-send (gmail.modify scope; cannot send
+mail, cannot permanently delete — archive only removes the INBOX label).
+Calendar can create, modify, RSVP to, and CANCEL events; calendar_cancel_event
+is the only destructive operation in this server's surface and is permanent.
+
+INVITES EMAIL PEOPLE: calendar_create_event, calendar_reschedule_event,
+calendar_add_attendees, and calendar_cancel_event email attendees by default
+(notify="all"). Pass notify="none" or "external_only" to control this. Tool
+descriptions state plainly when they email.
 TXT)]
 class GworkspaceServer extends Server
 {
@@ -76,6 +102,18 @@ class GworkspaceServer extends Server
         BulkLabelThreadsTool::class,
         BulkUnlabelThreadsTool::class,
         CreateDraftTool::class,
+
+        // Calendar (every tool takes `account`; emails attendees by default
+        // on attendee-affecting ops — see Instructions)
+        ListCalendarsTool::class,
+        ListEventsTool::class,
+        GetEventTool::class,
+        FindFreeTimeTool::class,
+        CreateEventTool::class,
+        RescheduleEventTool::class,
+        AddAttendeesTool::class,
+        RespondToEventTool::class,
+        CancelEventTool::class,
     ];
 
     /** @var array<int, class-string> */
