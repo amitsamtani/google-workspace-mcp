@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Services\Gmail\GmailClient;
 use App\Services\Gmail\TokenBucketLimiter;
+use App\Services\Google\AccountTokenManager;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\ServiceProvider;
 
@@ -14,10 +15,11 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        // Singletons so the in-memory access-token cache (GmailClient) and the
-        // rate-limit buckets (TokenBucketLimiter) persist across tool calls
-        // within a single long-lived stdio session.
+        // Singletons so the in-memory access-token cache (AccountTokenManager)
+        // and the rate-limit buckets (TokenBucketLimiter) persist across tool
+        // calls within a single long-lived stdio session.
         $this->app->singleton(TokenBucketLimiter::class);
+        $this->app->singleton(AccountTokenManager::class);
         $this->app->singleton(GmailClient::class);
     }
 
