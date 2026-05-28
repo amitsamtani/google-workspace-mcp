@@ -2,8 +2,8 @@
     "$schema": "https://getcomposer.org/schema.json",
     "name": "amitsamtani/google-workspace-mcp",
     "type": "project",
-    "description": "A local MCP server exposing Google Workspace (Gmail in v1) to Claude Code, with multi-account support, bulk operations, and in-chat onboarding. Bring Your Own Google Cloud Project.",
-    "keywords": ["mcp", "gmail", "google-workspace", "claude", "claude-code", "laravel"],
+    "description": "A local MCP server exposing Google Workspace (Gmail + Calendar) to Claude Code, with multi-account support, bulk operations, and in-chat onboarding. Bring Your Own Google Cloud Project.",
+    "keywords": ["mcp", "gmail", "google-calendar", "google-workspace", "claude", "claude-code", "laravel"],
     "license": "MIT",
     "homepage": "https://github.com/amitsamtani/google-workspace-mcp",
     "authors": [

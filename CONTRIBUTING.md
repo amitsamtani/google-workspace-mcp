@@ -1,8 +1,9 @@
 # Contributing to google-workspace-mcp
 
 Thanks for your interest! This project exposes Google Workspace to Claude Code
-over MCP. v1 is Gmail-only; the architecture is built to grow into `calendar_*`
-and `drive_*` tools on the same server.
+over MCP. v0.2 covers `gmail_*` and `calendar_*` on one local server; the
+architecture is built to grow into `drive_*` on the same server with the same
+scope-bundle / re-consent model.
 
 ## Development setup
 
@@ -30,39 +31,63 @@ php artisan mcp:inspector gworkspace
 
 ## Architecture at a glance
 
-- **`app/Mcp/Servers/GworkspaceServer.php`** — registers all tools; its
-  `#[Instructions]` teach Claude the multi-account + error-as-suggestion model.
-- **`app/Mcp/Tools/Gmail/*`** — one class per tool. Reads are annotated
-  `#[IsReadOnly]`; mutations write to the audit log. All return
+- **`app/Mcp/Servers/GworkspaceServer.php`** — registers every tool; its
+  `#[Instructions]` teach Claude the multi-account + scope-bundle +
+  error-as-suggestion model.
+- **`app/Mcp/Tools/{Gmail,Calendar}/*`** — one class per tool. Reads are
+  annotated `#[IsReadOnly]`; the lone destructive op (`calendar_cancel_event`)
+  is `#[IsDestructive]`; mutations write to the audit log. All return
   `Response::structured([...])`.
-- **`app/Mcp/Concerns/InteractsWithGmail.php`** — the onboarding `guard()` and
-  the structured `error`/`suggestion` payloads.
-- **`app/Services/Gmail/*`** — `GmailClient` (refresh/retry/HTTP-batch),
-  `GoogleClientFactory`, `OauthFlowManager` (two-step loopback flow),
-  `TokenBucketLimiter`, `GmailScopes`.
+- **`app/Mcp/Concerns/InteractsWithGoogleApi.php`** — shared trait. `guard()`
+  performs the layered onboarding + scope checks (returns
+  `no_oauth_credentials`/`no_accounts`/`unknown_account`/`scope_not_granted`
+  with a `suggestion`); `withGoogle()` translates service-layer exceptions
+  into structured payloads.
+- **`app/Services/Google/`** — `Scopes` (single scope registry / bundle) +
+  `AccountTokenManager` (per-account access-token cache, refresh-with-rotation,
+  rate-limited retry; shared by every API client).
+- **`app/Services/Gmail/*`** — `GmailClient` (Gmail mechanics + HTTP batch),
+  `OauthFlowManager` (two-step loopback OAuth, requests the bundle),
+  `GoogleClientFactory`, `TokenBucketLimiter`.
+- **`app/Services/Calendar/CalendarClient.php`** — Calendar mechanics:
+  EventDateTime build/parse, attendee read-modify-write, Meet conferenceData.
 - **`app/Services/AuditLogger.php`** — mutation audit log, with secret/body
   redaction.
+- **`app/Console/Commands/`** — `gworkspace:save-credentials` (hidden secret
+  prompt), `audit`, `list-accounts`, `remove-account`, and the hidden internal
+  `oauth-listen` (the detached loopback callback listener).
 
-## Adding a Gmail tool
+## Adding a tool
 
-1. `php artisan make:mcp-tool Gmail/MyTool` (or copy an existing tool).
-2. Set `#[Name('gmail_my_tool')]` and a `#[Description]` that ends by pointing
-   Claude at the relevant follow-up tool. Annotate reads with `#[IsReadOnly]`.
-3. Take a required `account` and call `$this->guard($account)` first.
-4. Do Gmail work through `GmailClient` (never the Google client directly), so
-   rate-limiting and retries apply.
+1. `php artisan make:mcp-tool {Gmail,Calendar}/MyTool` (or copy an existing tool).
+2. Set `#[Name('gmail_my_tool')]` / `#[Name('calendar_my_tool')]` and a
+   `#[Description]` that ends by pointing Claude at the relevant follow-up
+   tool. Annotate reads with `#[IsReadOnly]`; permanent-effect ops with
+   `#[IsDestructive]`.
+3. Take a required `account` and call `$this->guard($account, requireScope: <scope>)`
+   first — pass the scope your tool actually needs so the account-without-this-scope
+   case surfaces as `scope_not_granted`.
+4. Do API work through the matching client service (`GmailClient` /
+   `CalendarClient`) — never the Google client directly — so rate-limiting,
+   retries, and the shared token cache apply.
 5. For mutations, wrap the work in `AuditLogger::around(...)` or call
-   `record(...)`, and add any new secret param keys to `AuditLogger::REDACT`.
+   `record(...)`, and add any new secret/PII param keys to `AuditLogger::REDACT`.
 6. Register the class in `GworkspaceServer::$tools`.
 
 ## Guardrails (please preserve)
 
-- **Never** add a scope beyond `gmail.modify`, and never add send or
-  permanent-delete/trash capability. Archive = remove the `INBOX` label only.
+- **Gmail stays archive-only and no-send.** Don't broaden Gmail's scope
+  beyond `gmail.modify` and don't add send / permanent-delete / trash. Archive
+  means remove the `INBOX` label only.
+- **Calendar exposes a `notify` parameter on every attendee-affecting op**
+  (`all` / `external_only` / `none`) so the user can stay silent when they
+  want to. Default `all` (an invite no one receives is useless), but tool
+  descriptions must say plainly that they email people.
 - **No** "active account" state and **no** fan-out/broadcast tools — every
-  mutation must be one explicit, auditable call against one account.
+  mutation is one explicit, auditable call against one account.
 - All persistent state stays in SQLite. Don't read app behaviour from
-  user-editable config files.
+  user-editable config files (the auto-generated `.env` is the only exception,
+  and it's only there because Laravel needs `APP_KEY`).
 - Tool descriptions must not embed account values (discovery is via
   `gmail_list_accounts` so adding/removing accounts needs no restart).
 - Nothing may write to **stdout** except the MCP protocol — logs go to a file.

@@ -30,9 +30,14 @@ class GmailWizard
                 'url' => 'https://console.cloud.google.com/projectcreate',
             ],
             [
-                'id' => 'enable_gmail_api',
-                'title' => 'Enable the Gmail API',
-                'instructions' => 'With your project selected, open the Gmail API page and click "Enable".',
+                'id' => 'enable_apis',
+                'title' => 'Enable the Gmail and Calendar APIs',
+                'instructions' => 'With your project selected, enable BOTH APIs (one at a time): open the Gmail API '
+                    .'page and click "Enable", then open the Google Calendar API page and click "Enable". The '
+                    .'consent screen later will request scopes for both — if either API is not enabled in this '
+                    .'project, the matching tools will fail with "API has not been used in project X before or is '
+                    .'disabled". '
+                    .'(Calendar API library: https://console.cloud.google.com/apis/library/calendar-json.googleapis.com)',
                 'url' => 'https://console.cloud.google.com/apis/library/gmail.googleapis.com',
             ],
             [

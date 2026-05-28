@@ -1,14 +1,15 @@
 # google-workspace-mcp
 
-**Drive multiple Gmail accounts from your terminal, conversationally, through
-Claude Code.** A local [MCP](https://modelcontextprotocol.io) server that gives
-Claude bulk, multi-account control over Gmail — search, label, archive
-thousands of threads at once, and draft replies — with first-run setup handled
-*inside the chat*. Bring your own Google Cloud project; your data and
-credentials never leave your machine.
+**Drive multiple Google Workspace accounts from your terminal, conversationally,
+through Claude Code.** A local [MCP](https://modelcontextprotocol.io) server
+that gives Claude bulk, multi-account control over **Gmail and Google Calendar**
+— search/label/archive thousands of threads, draft replies, schedule meetings
+with Meet links, reschedule, RSVP, and find free time across calendars — with
+first-run setup handled *inside the chat*. Bring your own Google Cloud project;
+your data and credentials never leave your machine.
 
-> v1 is Gmail-only. The server is namespaced `gmail_*` so `calendar_*` and
-> `drive_*` can slot in later without disruption.
+> v0.2 ships `gmail_*` (27 tools total) and `calendar_*` on one local server.
+> `drive_*` is next on the same server.
 
 ---
 
@@ -35,18 +36,23 @@ claude
 
 Then say:
 
-> **"Help me set up Gmail."**
+> **"Help me set up Google Workspace."**
 
 Claude walks you through everything — creating your Google Cloud project,
-enabling the Gmail API, configuring consent, creating an OAuth client, and
-connecting each account — by calling the server's setup tools. **You don't need
-to read the rest of this README**; it's here for reference and for power users.
+enabling the Gmail + Calendar APIs, configuring consent, creating an OAuth
+client, and connecting each account — by calling the server's setup tools.
+**You don't need to read the rest of this README**; it's here for reference and
+for power users.
 
 Once set up, talk to it naturally:
 
 > "In amit@acme.com, archive every promo email older than 30 days."
 > "Label all unread invoices in finance@beta.io as Accounting/2026."
 > "Draft a reply to the latest thread from the landlord in me@gmail.com."
+> "Schedule a 30-min sync with founder@example.com tomorrow at 2pm PT, add a
+> Meet link."
+> "When am I free for an hour across all three accounts this Friday?"
+> "Move my 3pm to 4pm and tell them."
 
 ---
 
@@ -104,7 +110,9 @@ audit log in plaintext.
 ## Manual Google Cloud setup (skip if you use the in-chat wizard)
 
 1. **Create a project** → <https://console.cloud.google.com/projectcreate>
-2. **Enable the Gmail API** → <https://console.cloud.google.com/apis/library/gmail.googleapis.com>
+2. **Enable BOTH APIs** in your project:
+   - Gmail API → <https://console.cloud.google.com/apis/library/gmail.googleapis.com>
+   - Google Calendar API → <https://console.cloud.google.com/apis/library/calendar-json.googleapis.com>
 3. **Configure the audience / consent** → <https://console.cloud.google.com/auth/audience>
    - If **all** your accounts are in **one** Google Workspace org, choose user
      type **Internal**.
@@ -128,10 +136,24 @@ audit log in plaintext.
 
 ## What it can (and can't) do
 
-**Scope: `gmail.modify` only.** The server can read, label, and archive mail and
-create drafts. It **cannot send mail** and it **cannot delete or trash**
-anything — "archive" only removes the `INBOX` label. There is deliberately no
-path to permanent deletion.
+**Scopes (least-privilege bundle):**
+`gmail.modify` + `calendar.events` + `calendar.freebusy` + `calendar.calendarlist.readonly`.
+One consent grants the whole bundle per account; accounts connected before
+Calendar shipped can be re-authorized with the same flow (the server returns a
+clean `scope_not_granted` payload telling Claude to do it).
+
+**Gmail safety posture (unchanged from v1):** read/label/archive/drafts only;
+**cannot send mail**, **cannot delete or trash** anything. "Archive" only
+removes the `INBOX` label.
+
+**Calendar safety posture (intentional deltas, called out clearly):**
+- **Calendar tools email people** on insert/change/cancel by default
+  (`sendUpdates=all`). Each such tool exposes a `notify` param —
+  `all` / `external_only` / `none`. Tool descriptions state plainly when they
+  email.
+- **`calendar_cancel_event` is permanent** — Calendar has no trash. It's the
+  one destructive operation on the server and is marked `#[IsDestructive]` +
+  audited.
 
 ### Tools
 
@@ -142,27 +164,41 @@ path to permanent deletion.
 | `gmail_setup_status` | Current setup state + `next_step`. |
 | `gmail_setup_wizard` | Step-by-step BYOGCP walkthrough. |
 | `gmail_save_oauth_credentials` | Store Client ID/Secret (encrypted). |
-| `gmail_start_oauth_flow` | Begin loopback OAuth; returns a consent URL. |
+| `gmail_start_oauth_flow` | Begin loopback OAuth; returns a consent URL. Requests the full Gmail + Calendar scope bundle. |
 | `gmail_complete_oauth_flow` | Check/confirm the flow result. |
 | `gmail_remove_account` | Revoke at Google + delete locally. |
-| `gmail_list_accounts` | Canonical set of connected accounts. |
+| `gmail_list_accounts` | Canonical set of connected accounts (with each account's granted scopes). |
 
 **Mail** (every tool requires an explicit `account`):
 
 | Tool | Purpose |
 |------|---------|
 | `gmail_search_threads` | Search (Gmail query syntax); returns ids + snippets, paged. |
-| `gmail_get_thread` | Full thread content. |
+| `gmail_get_thread` | Full thread content (recursive plaintext body extraction). |
 | `gmail_list_labels` / `gmail_create_label` | Manage labels. |
 | `gmail_label_thread` / `gmail_unlabel_thread` | Single-thread label changes. |
 | `gmail_archive_thread` | Remove `INBOX` from one thread. |
 | `gmail_bulk_archive_threads` | Archive up to **1000** threads/call, per-thread status. |
 | `gmail_bulk_label_threads` / `gmail_bulk_unlabel_threads` | Bulk label changes. |
-| `gmail_create_draft` | Create a draft (optionally a threaded reply). Never sends. |
+| `gmail_create_draft` | Create a draft (optionally a threaded reply; RFC 2047 subject encoding). Never sends. |
 
-Bulk tools batch `threads.modify` over Gmail's HTTP batch endpoint (100 per
-round trip) and return a **per-thread status map** — so a 900-thread archive is
-a handful of requests, and you see exactly which ids succeeded.
+**Calendar** (every tool requires an explicit `account`):
+
+| Tool | Purpose |
+|------|---------|
+| `calendar_list_calendars` | Calendars on the account (use ids with the rest; `primary` is always valid). |
+| `calendar_list_events` | Check schedule between two times; recurring events expanded. |
+| `calendar_get_event` | Full event details (attendees, response statuses, recurrence). |
+| `calendar_find_free_time` | Free/busy across one or more calendars (narrow scope, no event details). |
+| `calendar_create_event` | Schedule a meeting; attendees, optional Meet link, optional RRULE recurrence; emails by default. |
+| `calendar_reschedule_event` | Move via `events.patch` (preserves other fields); emails by default. |
+| `calendar_add_attendees` | Invite more people to an existing event (read-modify-write); emails by default. |
+| `calendar_respond_to_event` | RSVP (accepted/declined/tentative/needsAction). |
+| `calendar_cancel_event` | **Destructive.** `events.delete`; emails attendees by default. |
+
+Bulk Gmail tools batch `threads.modify` over Gmail's HTTP batch endpoint
+(100 per round trip) and return a **per-thread status map** — so a 900-thread
+archive is a handful of requests, and you see exactly which ids succeeded.
 
 ---
 
@@ -181,17 +217,21 @@ a handful of requests, and you see exactly which ids succeeded.
 ```
 Claude Code ──stdio JSON-RPC──> php artisan mcp:start gworkspace
                                    │
-                                   ├─ app/Mcp/Servers/GworkspaceServer.php   (tool registry + instructions)
-                                   ├─ app/Mcp/Tools/Gmail/*Tool.php          (one class per gmail_* tool)
-                                   ├─ app/Mcp/Concerns/InteractsWithGmail.php (guard + error-as-suggestion)
-                                   ├─ app/Services/Gmail/GmailClient.php      (refresh / retry / HTTP-batch)
-                                   ├─ app/Services/Gmail/OauthFlowManager.php (two-step loopback OAuth)
-                                   └─ app/Services/AuditLogger.php           (mutation audit + redaction)
+                                   ├─ app/Mcp/Servers/GworkspaceServer.php       (tool registry + instructions)
+                                   ├─ app/Mcp/Tools/Gmail/*Tool.php              (gmail_* tools)
+                                   ├─ app/Mcp/Tools/Calendar/*Tool.php           (calendar_* tools)
+                                   ├─ app/Mcp/Concerns/InteractsWithGoogleApi.php (scope-aware guard + error-as-suggestion)
+                                   ├─ app/Services/Google/Scopes.php             (single scope registry)
+                                   ├─ app/Services/Google/AccountTokenManager.php (token cache / refresh / retry / rate-limit — shared)
+                                   ├─ app/Services/Gmail/GmailClient.php          (Gmail mechanics + HTTP batch)
+                                   ├─ app/Services/Calendar/CalendarClient.php    (Calendar mechanics + EventDateTime/attendee helpers)
+                                   ├─ app/Services/Gmail/OauthFlowManager.php     (two-step loopback OAuth; requests the bundle)
+                                   └─ app/Services/AuditLogger.php               (mutation audit + redaction)
 
                                    SQLite (~/.google-workspace-mcp/data.sqlite)
                                    ├─ oauth_credentials  (encrypted client id/secret)
-                                   ├─ email_accounts     (encrypted refresh tokens, scopes)
-                                   └─ mcp_audit_log       (every mutation)
+                                   ├─ email_accounts     (encrypted refresh tokens, actually-granted scopes per account)
+                                   └─ mcp_audit_log      (every mutation, gmail and calendar)
 ```
 
 Design choices worth knowing:
@@ -209,7 +249,8 @@ Design choices worth knowing:
 
 ## Audit log (mutations only)
 
-Every mutating call (label/unlabel/archive/draft + setup mutations) is recorded;
+Every mutating call — Gmail label/unlabel/archive/draft + Calendar
+create/reschedule/add-attendees/RSVP/cancel + setup mutations — is recorded;
 reads are not. Secrets and message bodies are redacted. Query it:
 
 ```bash
@@ -218,8 +259,13 @@ php artisan gworkspace:audit --account=amit@acme.com --tool=gmail_bulk_archive_t
 php artisan gworkspace:audit --since="2026-05-01"
 ```
 
-Other shell helpers: `php artisan gworkspace:list-accounts`,
-`php artisan gworkspace:remove-account <email>`.
+Other shell helpers:
+
+```bash
+php artisan gworkspace:save-credentials      # hidden secret prompt — keeps the secret out of any transcript
+php artisan gworkspace:list-accounts
+php artisan gworkspace:remove-account <email>
+```
 
 ## Reliability
 
@@ -245,17 +291,21 @@ claude mcp add --scope user gworkspace -- php ~/.google-workspace-mcp/artisan mc
 
 ## Roadmap
 
-- `calendar_*` — list/create/update events across accounts.
-- `drive_*` — search, share, and organize files.
+- `drive_*` — search, share, and organize files (on the same server, same
+  scope bundle / re-consent model).
 - Optional support for multiple Google Cloud projects (the schema already
   reserves this).
+- Pest test suite for the pure logic (guards, wizard state, audit redaction,
+  EventDateTime building, MIME).
 
 Same server, same multi-account + audit + error-as-suggestion model.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Please preserve the guardrails
-(gmail.modify only, no send, no delete, no fan-out, all state in SQLite).
+See [CONTRIBUTING.md](CONTRIBUTING.md). Please preserve the guardrails: Gmail
+stays archive-only / no-send; Calendar tools always expose a `notify`
+parameter (default `all` so invites actually reach people, but Claude can be
+told to stay silent); no fan-out broadcast tools; all state in SQLite.
 
 ## License
 
