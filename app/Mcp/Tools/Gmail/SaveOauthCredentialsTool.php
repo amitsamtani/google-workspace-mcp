@@ -2,7 +2,7 @@
 
 namespace App\Mcp\Tools\Gmail;
 
-use App\Mcp\Concerns\InteractsWithGmail;
+use App\Mcp\Concerns\InteractsWithGoogleApi;
 use App\Models\OauthCredential;
 use App\Services\AuditLogger;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -25,7 +25,7 @@ use Laravel\Mcp\Server\Tools\Annotations\IsDestructive;
 )]
 class SaveOauthCredentialsTool extends Tool
 {
-    use InteractsWithGmail;
+    use InteractsWithGoogleApi;
 
     public function handle(Request $request, AuditLogger $audit): ResponseFactory
     {

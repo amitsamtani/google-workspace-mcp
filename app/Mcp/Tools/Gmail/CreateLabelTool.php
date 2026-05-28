@@ -2,7 +2,7 @@
 
 namespace App\Mcp\Tools\Gmail;
 
-use App\Mcp\Concerns\InteractsWithGmail;
+use App\Mcp\Concerns\InteractsWithGoogleApi;
 use App\Services\AuditLogger;
 use App\Services\Gmail\GmailClient;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -19,7 +19,7 @@ use Laravel\Mcp\Server\Tool;
 )]
 class CreateLabelTool extends Tool
 {
-    use InteractsWithGmail;
+    use InteractsWithGoogleApi;
 
     public function handle(Request $request, GmailClient $gmail, AuditLogger $audit): ResponseFactory
     {
@@ -35,7 +35,7 @@ class CreateLabelTool extends Tool
             'text_color' => ['nullable', 'string'],
         ]);
 
-        return $this->withGmail($account, function () use ($gmail, $audit, $account, $validated): ResponseFactory {
+        return $this->withGoogle($account, function () use ($gmail, $audit, $account, $validated): ResponseFactory {
             $label = $audit->around(
                 tool: 'gmail_create_label',
                 account: $account,

@@ -2,7 +2,7 @@
 
 namespace App\Mcp\Tools\Gmail;
 
-use App\Mcp\Concerns\InteractsWithGmail;
+use App\Mcp\Concerns\InteractsWithGoogleApi;
 use App\Services\AuditLogger;
 use App\Services\Gmail\GmailClient;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -20,7 +20,7 @@ use Laravel\Mcp\Server\Tool;
 )]
 class BulkUnlabelThreadsTool extends Tool
 {
-    use InteractsWithGmail;
+    use InteractsWithGoogleApi;
 
     private const MAX_IDS = 1000;
 
@@ -43,7 +43,7 @@ class BulkUnlabelThreadsTool extends Tool
         $threadIds = array_values(array_unique($validated['thread_ids']));
         $labelIds = $validated['label_ids'];
 
-        return $this->withGmail($account, function () use ($gmail, $audit, $account, $threadIds, $labelIds): ResponseFactory {
+        return $this->withGoogle($account, function () use ($gmail, $audit, $account, $threadIds, $labelIds): ResponseFactory {
             $results = $gmail->modifyThreadsBatch($account, $threadIds, removeLabelIds: $labelIds);
 
             $succeeded = count(array_filter($results, fn (array $r): bool => $r['status'] === 'ok'));

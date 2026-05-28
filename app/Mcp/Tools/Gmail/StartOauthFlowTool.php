@@ -2,7 +2,7 @@
 
 namespace App\Mcp\Tools\Gmail;
 
-use App\Mcp\Concerns\InteractsWithGmail;
+use App\Mcp\Concerns\InteractsWithGoogleApi;
 use App\Services\Gmail\OauthFlowManager;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Mcp\Request;
@@ -13,15 +13,17 @@ use Laravel\Mcp\Server\Tool;
 
 #[Name('gmail_start_oauth_flow')]
 #[Description(
-    'Begin connecting a Google account via the loopback OAuth flow. Probes for a free local port, starts a '
-    .'background listener, and returns { consent_url, bound_port, state, expires_in_seconds: 300 }. Tell the user '
-    .'to open consent_url in their browser and authorize the account they want to add. This returns immediately; '
-    .'after the user authorizes, call gmail_complete_oauth_flow (optionally with the returned state) to confirm. '
-    .'Requires OAuth credentials to be saved first.'
+    'Begin connecting (or re-authorizing) a Google account via the loopback OAuth flow. Probes for a free local '
+    .'port, starts a background listener, and returns { consent_url, bound_port, state, expires_in_seconds: 300 }. '
+    .'The consent screen requests the full scope bundle (Gmail + Calendar) so one authorization grants both. Use '
+    .'this with an email_hint to RE-AUTHORIZE an existing account that needs additional scopes (e.g. on '
+    .'scope_not_granted). Tell the user to open consent_url in their browser and authorize; this returns '
+    .'immediately. After the user authorizes, call gmail_complete_oauth_flow (optionally with the returned state) '
+    .'to confirm. Requires OAuth credentials to be saved first.'
 )]
 class StartOauthFlowTool extends Tool
 {
-    use InteractsWithGmail;
+    use InteractsWithGoogleApi;
 
     public function handle(Request $request, OauthFlowManager $flow): ResponseFactory
     {

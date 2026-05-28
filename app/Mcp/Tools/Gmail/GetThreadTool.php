@@ -2,7 +2,7 @@
 
 namespace App\Mcp\Tools\Gmail;
 
-use App\Mcp\Concerns\InteractsWithGmail;
+use App\Mcp\Concerns\InteractsWithGoogleApi;
 use App\Services\Gmail\GmailClient;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Mcp\Request;
@@ -20,7 +20,7 @@ use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 )]
 class GetThreadTool extends Tool
 {
-    use InteractsWithGmail;
+    use InteractsWithGoogleApi;
 
     public function handle(Request $request, GmailClient $gmail): ResponseFactory
     {
@@ -34,7 +34,7 @@ class GetThreadTool extends Tool
             'thread_id' => ['required', 'string'],
         ]);
 
-        return $this->withGmail($account, fn (): ResponseFactory => $this->structured(
+        return $this->withGoogle($account, fn (): ResponseFactory => $this->structured(
             $gmail->getThread($account, $validated['thread_id'])
         ));
     }

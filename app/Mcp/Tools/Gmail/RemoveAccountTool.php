@@ -2,7 +2,7 @@
 
 namespace App\Mcp\Tools\Gmail;
 
-use App\Mcp\Concerns\InteractsWithGmail;
+use App\Mcp\Concerns\InteractsWithGoogleApi;
 use App\Models\EmailAccount;
 use App\Services\AuditLogger;
 use App\Services\Gmail\GoogleClientFactory;
@@ -23,7 +23,7 @@ use Throwable;
 )]
 class RemoveAccountTool extends Tool
 {
-    use InteractsWithGmail;
+    use InteractsWithGoogleApi;
 
     public function handle(Request $request, AuditLogger $audit, GoogleClientFactory $factory): ResponseFactory
     {

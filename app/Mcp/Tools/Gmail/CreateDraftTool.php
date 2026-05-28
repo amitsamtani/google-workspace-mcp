@@ -2,7 +2,7 @@
 
 namespace App\Mcp\Tools\Gmail;
 
-use App\Mcp\Concerns\InteractsWithGmail;
+use App\Mcp\Concerns\InteractsWithGoogleApi;
 use App\Services\AuditLogger;
 use App\Services\Gmail\GmailClient;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -21,7 +21,7 @@ use Laravel\Mcp\Server\Tool;
 )]
 class CreateDraftTool extends Tool
 {
-    use InteractsWithGmail;
+    use InteractsWithGoogleApi;
 
     public function handle(Request $request, GmailClient $gmail, AuditLogger $audit): ResponseFactory
     {
@@ -40,7 +40,7 @@ class CreateDraftTool extends Tool
             'reply_to_message_id' => ['nullable', 'string'],
         ]);
 
-        return $this->withGmail($account, function () use ($gmail, $audit, $account, $validated): ResponseFactory {
+        return $this->withGoogle($account, function () use ($gmail, $audit, $account, $validated): ResponseFactory {
             $draft = $audit->around(
                 tool: 'gmail_create_draft',
                 account: $account,

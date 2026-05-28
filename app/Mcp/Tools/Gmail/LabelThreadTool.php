@@ -2,7 +2,7 @@
 
 namespace App\Mcp\Tools\Gmail;
 
-use App\Mcp\Concerns\InteractsWithGmail;
+use App\Mcp\Concerns\InteractsWithGoogleApi;
 use App\Services\AuditLogger;
 use App\Services\Gmail\GmailClient;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -19,7 +19,7 @@ use Laravel\Mcp\Server\Tool;
 )]
 class LabelThreadTool extends Tool
 {
-    use InteractsWithGmail;
+    use InteractsWithGoogleApi;
 
     public function handle(Request $request, GmailClient $gmail, AuditLogger $audit): ResponseFactory
     {
@@ -35,7 +35,7 @@ class LabelThreadTool extends Tool
             'label_ids.*' => ['string'],
         ]);
 
-        return $this->withGmail($account, function () use ($gmail, $audit, $account, $validated): ResponseFactory {
+        return $this->withGoogle($account, function () use ($gmail, $audit, $account, $validated): ResponseFactory {
             $audit->around(
                 tool: 'gmail_label_thread',
                 account: $account,
