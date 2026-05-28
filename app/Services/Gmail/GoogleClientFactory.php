@@ -4,6 +4,7 @@ namespace App\Services\Gmail;
 
 use App\Exceptions\OnboardingRequiredException;
 use App\Models\OauthCredential;
+use App\Services\Google\Scopes;
 use Google\Client as GoogleClient;
 
 /**
@@ -33,7 +34,10 @@ class GoogleClientFactory
         $client->setApplicationName('google-workspace-mcp');
         $client->setClientId($credential->client_id);
         $client->setClientSecret($credential->client_secret);
-        $client->setScopes($scopes !== [] ? $scopes : GmailScopes::default());
+        // Fall back to the full bundle so a freshly-built client can act on
+        // any granted scope. Callers that need to limit (e.g. revoke) pass an
+        // explicit scope list.
+        $client->setScopes($scopes !== [] ? $scopes : Scopes::requested());
 
         // access_type=offline + prompt=consent guarantee a refresh_token is
         // issued on first authorization (Desktop client, loopback redirect).

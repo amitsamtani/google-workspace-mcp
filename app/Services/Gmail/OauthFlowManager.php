@@ -2,6 +2,7 @@
 
 namespace App\Services\Gmail;
 
+use App\Services\Google\Scopes;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -40,7 +41,10 @@ class OauthFlowManager
         $port = $this->findOpenPort();
         $state = Str::random(40);
 
-        $client = $this->factory->make(GmailScopes::default(), self::redirectUri($port));
+        // Request the full bundle: one consent grants Gmail + Calendar (and
+        // later Drive) for this account. The listener stores whatever was
+        // actually granted off the token response.
+        $client = $this->factory->make(Scopes::requested(), self::redirectUri($port));
         $client->setState($state);
         if ($emailHint !== null && $emailHint !== '') {
             $client->setLoginHint($emailHint);

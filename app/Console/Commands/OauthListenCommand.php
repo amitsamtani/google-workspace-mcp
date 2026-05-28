@@ -4,9 +4,9 @@ namespace App\Console\Commands;
 
 use App\Models\EmailAccount;
 use App\Services\AuditLogger;
-use App\Services\Gmail\GmailScopes;
 use App\Services\Gmail\GoogleClientFactory;
 use App\Services\Gmail\OauthFlowManager;
+use App\Services\Google\Scopes;
 use Google\Service\Gmail;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Cache;
@@ -62,7 +62,7 @@ class OauthListenCommand extends Command
         }
 
         try {
-            $client = $factory->make(GmailScopes::default(), OauthFlowManager::redirectUri($port));
+            $client = $factory->make(Scopes::requested(), OauthFlowManager::redirectUri($port));
             $token = $client->fetchAccessTokenWithAuthCode($code);
 
             if (isset($token['error']) || empty($token['refresh_token'])) {
@@ -73,13 +73,21 @@ class OauthListenCommand extends Command
             }
 
             $client->setAccessToken($token);
+            // gmail.modify covers users.getProfile (the canonical way to learn
+            // the account's email after consent). If the user declined the
+            // gmail scope, this will fail and we surface that.
             $email = (new Gmail($client))->users->getProfile('me')->getEmailAddress();
+
+            // Store whatever scopes Google actually granted (may be a subset
+            // of what we requested if the user de-checked any), so per-tool
+            // scope guards reflect reality.
+            $grantedScopes = Scopes::fromTokenResponse($token['scope'] ?? null);
 
             EmailAccount::updateOrCreate(
                 ['email' => $email],
                 [
                     'refresh_token' => $token['refresh_token'],
-                    'scopes' => GmailScopes::default(),
+                    'scopes' => $grantedScopes,
                     'added_at' => now(),
                     'last_used_at' => now(),
                 ],
